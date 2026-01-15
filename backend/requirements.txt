@@ -1,7 +1,9 @@
 fastapi
 uvicorn
 python-multipart
-pypdf
+# pypdf -> removing pypdf in favor of pymupdf? Or keep both? PyMuPDF is superior.
+# pypdf 
+pymupdf
 genanki
 openai
 pydantic

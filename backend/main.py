@@ -26,25 +26,39 @@ async def generate_deck(file: UploadFile = File(...)):
     print(f"📄 Processing {file.filename}...")
     
     try:
-        # 1. Extract Text
-        # Ensure regex start
+        # 1. Analyze Document (Text or Vision)
+        from vision_engine import process_pdf
+        
         await file.seek(0)
         try:
-            text = extract_text(file.file)
+            # process_pdf returns {"mode": "...", "content": ...}
+            # We want to extract just the content for the graph.
+            # But the graph "chunker" expects "original_text".
+            # If it's a list of images, chunker needs to handle it.
+            
+            # Let's handle the stream reading inside process_pdf? 
+            # Ideally process_pdf takes bytes or stream.
+            
+            result_payload = process_pdf(file.file)
+            content = result_payload["content"]
+            mode = result_payload["mode"]
+            
         except Exception as e:
-            print(f"Extraction Error: {e}")
+            print(f"Processing Error: {e}")
             raise HTTPException(status_code=400, detail=f"PDF Read Failed: {e}")
             
-        if not text:
-             print("Text empty.")
-             raise HTTPException(status_code=400, detail="Could not extract text (scanned PDF?).")
+        if not content:
+             print("Content empty.")
+             raise HTTPException(status_code=400, detail="Could not extract content.")
 
-        print(f"Extracted {len(text)} chars. Running Agents...")
+        print(f"Processed Document. Mode: {mode}. Content Size: {len(content)}")
 
         # 2. Run Multi-Agent Graph
         from agent_graph import app_graph
         try:
-            inputs = {"original_text": text, "chunks": [], "partial_cards": [], "final_cards": []}
+            # If mode is text, content is String. If mode is image, content is List[String]
+            # We pass it as 'original_text' (misnomer, but state key)
+            inputs = {"original_text": content, "chunks": [], "partial_cards": [], "final_cards": []}
             result = app_graph.invoke(inputs)
             cards_data = result.get("final_cards", [])
             

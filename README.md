@@ -1,87 +1,69 @@
-# ⚡ FlashDeck AI (Native AI Workshop)
+# ⚡ FlashDeck AI (v2.0 Turbo)
 
-> **"From PDF to Flashcards in Seconds — Powered by Multi-Agent AI."**
+> **"The Ultimate AI Flashcard Generator. Now with Vision & Parallel Processing."**
 
-FlashDeck AI is a full-stack automated flashcard generation platform. It mimics the efficiency of **Google's NotebookLM**, analyzing complex PDF documents (100+ slides) and intelligently synthesizing them into high-quality Anki flashcards using a **LangGraph Multi-Agent Architecture**.
+FlashDeck AI is a sophisticated multi-agent platform that turns **Any Document** (PDFs, Scanned Notes, Slides) into high-quality Anki flashcards. It mimics the power of **Google NotebookLM** but is specialized for active recall.
 
 ---
 
-## 🏗️ Architecture: The Agentic Workflow
+## 🚀 New in v2.0: "Turbo Mode"
+-   **👁️ Vision Engine**: Automatically detects scanned PDFs or handwriting and uses **Gemini Vision** to "read" the pages.
+-   **⚡ Map-Reduce Architecture**: Processes documents in **Parallel Batches** (Map-Reduce pattern) using LangGraph.
+-   **🏎️ Speed**: 5x faster generation using **Gemini 3 Flash** and Batching (5 slides per prompt).
 
-We moved beyond simple RAG. FlashDeck uses a **Map-Reduce Agent Graph** to process documents at scale without losing context.
+---
+
+## 🏗️ Architecture
 
 ```mermaid
 graph LR
-    User[User Uploads PDF] --> B[Backend API]
-    B --> A1[Agent: Chunker]
-    A1 -->|Splits Text| A2[Agent: Generator]
-    A2 -->|Map: Generates Cards| A3[Agent: Refiner]
-    A3 -->|Reduce: Deduplicates| DB[Final Deck JSON]
-    DB --> F[Frontend UI]
+    PDF[User Upload] --> Router{Text or Image?}
+    Router -->|Text| Chunker[Text Splitter]
+    Router -->|Image| Batcher[Vision Batcher]
+    
+    Chunker --> Map
+    Batcher --> Map
+    
+    subgraph Parallel Workers
+    Map --> W1[Worker 1]
+    Map --> W2[Worker 2]
+    Map --> W3[Worker 3]
+    end
+    
+    W1 --> Reducer[Refiner Agent]
+    W2 --> Reducer
+    W3 --> Reducer
+    
+    Reducer --> FinalDeck[JSON Deck]
 ```
 
-### 🧠 The Agents (LangGraph)
-1.  **The Chunker**: Splits large PDFs into logical semantic blocks (avoiding token limits).
-2.  **The Generator**: A parallelized agent that reads each chunk and extracts key concepts into Q&A pairs (using `Gemini-3-Pro-Preview`).
-3.  **The Refiner**: Aggregates all generated cards, removes duplicates, and ensures quality consistency.
-
----
-
-## 🚀 Key Features
--   **Multi-Agent Backend**: Powered by **LangChain**, **LangGraph**, and **OpenRouter** (Gemini Models).
--   **Observability**: Full tracing and monitoring via **LangSmith**.
--   **Notion-Style UI**: A premium, dark-mode aesthetic built with **React**, **Vite**, and **TailwindCSS**.
--   **Interactive Study**: Hover-to-reveal answers (optional), Focus Mode, and Grid View.
--   **Universal Export**: 
-    -   📸 **Image Grid** (PNG) for sharing.
-    -   📄 **PDF** (High-Res 300DPI) for printing.
-    -   🎴 **Anki Package** (.apkg) for serious study.
-
----
-
 ## 🛠️ Tech Stack
-
-### Phase 1: Backend (Python)
--   **Framework**: FastAPI
--   **AI Orchestration**: LangChain, LangGraph
--   **Model**: Google Gemini 3 Pro Preview (via OpenRouter)
--   **Tracing**: LangSmith
--   **PDF Processing**: PyPDF
-
-### Phase 2: Frontend (React)
--   **Framework**: Vite + React
--   **Styling**: Tailwind CSS (Dark Mode)
--   **Icons**: Lucide React
--   **Components**: Custom Sticky Tabs, Glassmorphism Cards
+-   **Backend**: FastAPI, LangGraph (Map-Reduce), Pydantic
+-   **AI**: Google Gemini 3 Flash (via OpenRouter)
+-   **Frontend**: React, Vite, TailwindCSS (Notion Style)
+-   **Monitoring**: LangSmith Tracing
 
 ---
 
 ## ⚡ Quick Start
 
-### 1. Backend Setup
+### 1. Backend
 ```bash
 cd backend
+# Setup Env
+cp ../.env.example ../.env
+# (Add your OPENROUTER_API_KEY)
+
+# Install
 pip install -r requirements.txt
 
-# Environment Setup
-# Copy the example env file to .env
-cp ../.env.example ../.env
-
-# Edit the .env file with your specific keys:
-# - LANGSMITH_API_KEY
-# - OPENROUTER_API_KEY
-```
-
-```bash
-# Run Server
+# Run
 uvicorn main:app --reload --port 8001
 ```
 
-### 2. Frontend Setup
+### 2. Frontend
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-
-Visit `http://localhost:5173` and drag-and-drop your lecture notes! 🎓
