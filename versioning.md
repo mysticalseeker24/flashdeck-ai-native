@@ -17,8 +17,12 @@ We transitioned to a **LangGraph** architecture that supports dynamic paralleliz
 ```mermaid
 graph LR
     Input[PDF / Images] --> Batcher[Chunker: Batches of 5]
-    Batcher -->|Send()| W1[Worker 1] & W2[Worker 2] & W3[Worker 3]
-    W1 & W2 & W3 -->|Yield| Reducer[Refiner Agent]
+    Batcher -->|Send| W1[Worker 1]
+    Batcher -->|Send| W2[Worker 2]
+    Batcher -->|Send| W3[Worker 3]
+    W1 -->|Yield| Reducer[Refiner Agent]
+    W2 -->|Yield| Reducer
+    W3 -->|Yield| Reducer
     Reducer --> Output[Final Deck]
 ```
 
