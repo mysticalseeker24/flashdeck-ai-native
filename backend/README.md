@@ -1,30 +1,62 @@
-# 🧠 FlashDeck AI - Backend (v2.0)
+# FlashDeck AI Backend 🧠
 
-The engine room of FlashDeck. Now powered by **LangGraph Map-Reduce**.
+The intelligent core of FlashDeck, powered by LangChain, OpenAI, and ChromaDB.
 
-## 📂 Key Files
--   `agent_graph.py`: **The Core**. Defines the Map-Reduce Graph.
-    -   **Mapper**: Batches content (5 images or 4k chars).
-    -   **Workers**: Parallel `generate_node` instances.
-    -   **Reducer**: `refine_deck` aggregates and deduplicates.
--   `vision_engine.py`: Handles PDF-to-Image conversion for scanned docs.
--   `main.py`: FastAPI entry point.
+## 🚀 Features
 
-## 🤖 The Graph (Map-Reduce)
-We use LangGraph's `Send` API to parallelize work.
+*   **Multimodal RAG**: Processes highly complex PDFs (text-heavy or scanned/handwritten) using a hybrid approach.
+    *   **Text Mode**: Uses standard embedding-based retrieval.
+    *   **Vision Mode**: Uses Google Gemini 3 Flash (or equivalent) to transcribe and describe visual content for indexing.
+*   **Agentic Workflow**: A LangGraph-based state machine orchestrated the deck generation:
+    *   **Chunker**: Splits documents intelligently.
+    *   **Generator**: Creates flashcards and flowcharts in parallel batches.
+    *   **Refiner**: Aggregates results, removes duplicates, and indexes content into ChromaDB.
+*   **Interactive Chat**: Context-aware chatbot that "thinks" aloud in the console, providing transparency.
+*   **Vector Search**: Uses `chromadb` for persistent storage of document embeddings.
 
-1.  **Chunk/Batch**: The document is split into $N$ batches.
-2.  **Map**: $N$ parallel calls are sent to the LLM.
-3.  **Reduce**: Results are gathered automatically into `partial_cards`.
+## 🛠️ Stack
 
-## ⚡ Performance
--   **Model**: `google/gemini-3-flash-preview` (Fast & Cheap).
--   **Batching**: 5 Images per API Call = 80% Cost Reduction.
--   **Parallelism**: Async execution for ~15s total processing time.
+*   **Framework**: FastAPI
+*   **AI Orchestration**: LangChain, LangGraph
+*   **Vector DB**: ChromaDB
+*   **LLM**: OpenRouter (Google Gemini 3 Flash Preview)
+*   **PDF Processing**: PyMuPDF (Fitz)
 
-## 🛠️ Environment
-Ensure your `.env` has:
-```ini
-OPENROUTER_API_KEY=sk-or-v1-...
-LANGSMITH_TRACING=true
-```
+## 🏃‍♂️ Setup & Run
+
+1.  **Environment**:
+    Create a `.env` file in this directory:
+    ```env
+    OPENROUTER_API_KEY=sk-or-...
+    ```
+
+3.  **Setup Virtual Environment**:
+    ```bash
+    # Create venv
+    python -m venv venv
+    
+    # Activate (Windows)
+    .\venv\Scripts\activate
+    
+    # Activate (Mac/Linux)
+    source venv/bin/activate
+    ```
+
+4.  **Install Dependencies**:
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+3.  **Start Server**:
+    ```bash
+    python -m uvicorn main:app --port 8001 --reload
+    ```
+    *   The server will verify ChromaDB configuration on startup.
+    *   API Docs available at: `http://localhost:8001/docs`
+
+## 📂 Project Structure
+
+*   `main.py`: API Entry points (`/generate`, `/chat`).
+*   `agent_graph.py`: The brain. Defines the LangGraph workflow and LLM prompts.
+*   `rag_engine.py`: Handles vector storage, embedding generation, and retrieval.
+*   `deck_builder.py`: Exports flashcards to Anki (.apkg) format.

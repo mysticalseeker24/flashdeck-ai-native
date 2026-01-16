@@ -1,6 +1,6 @@
 import os
 import operator
-from typing import List, TypedDict, Annotated, Dict, Any, Union
+from typing import List, TypedDict, Annotated, Dict, Any, Union, Optional
 from typing_extensions import TypedDict as ExtTypedDict
 
 from langchain_openai import ChatOpenAI
@@ -16,6 +16,13 @@ from dotenv import load_dotenv, find_dotenv
 # Load env
 env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
 load_dotenv(env_path)
+
+# Import RAG Engine
+try:
+    import rag_engine
+except ImportError:
+    # Handle case where dependencies aren't ready yet or path issue
+    rag_engine = None
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 if not OPENROUTER_API_KEY:
@@ -35,11 +42,14 @@ llm = ChatOpenAI(
 # --- SCHEMAS ---
 
 class Flashcard(BaseModel):
-    q: str = Field(description="Question")
-    a: str = Field(description="Answer")
+    q: str = Field(description="The question part of the flashcard")
+    a: str = Field(description="The answer part of the flashcard")
+    topic: str = Field(description="The subtopic or section title this card belongs to (e.g., 'Introduction', 'Key Concepts')")
 
 class CardList(BaseModel):
     cards: List[Flashcard]
+    flowchart: Optional[str] = Field(description="Mermaid.js code for the flowchart")
+    transcription: Optional[str] = Field(description="Detailed text summary/transcription for RAG")
 
 # Main Graph State
 class DeckState(TypedDict):
@@ -48,6 +58,10 @@ class DeckState(TypedDict):
     # OR we append to partial_cards list.
     partial_cards: Annotated[List[Dict], operator.add] 
     final_cards: List[Dict]
+    batches: List[List[str]] # Temp storage for mapper
+    deck_id: str
+    flowcharts: Annotated[List[str], operator.add]
+    transcriptions: Annotated[List[str], operator.add] # For RAG on Vision
 
 # Worker State (Input for Map)
 class BatchInput(TypedDict):
@@ -85,23 +99,28 @@ def chunk_document(state: DeckState):
         batches = [[c] for c in text_chunks] 
 
     print(f"Created {len(batches)} batches/jobs.")
-    # We return the list of batches to be used by the conditional edge Logic
-    # But standard graph nodes return State updates.
-    # We will pass 'batches' as a temporary key or rely on logic inside the edge function?
-    # LangGraph best practice: return to state? 
-    # But BatchInput is separate. 
-    # Use a hidden key in state? make 'batches' part of state?
-    # Actually, we can just return logic for the edge if we move this logic TO the edge?
-    # No, keep node. Let's add 'batches' to DeckState so edge can read it.
-    return {"batches": batches} # Needs to be added to TypedDict above? 
-    # Or strict typing? Let's add it.
-
-# Modified DeckState to holding batches temporarily
-class DeckState(TypedDict):
-    original_text: Union[str, List[str]]
-    partial_cards: Annotated[List[Dict], operator.add] 
-    final_cards: List[Dict]
-    batches: List[List[str]] # Temp storage for mapper
+    
+    # --- RAG INDEXING ---
+    if rag_engine and isinstance(content, str):
+        # We index the chunks we created for text
+        # If content is string (Text Mode)
+        # We'll use the chunks logic
+        if 'batches' not in locals(): # redundancy check
+             pass
+        # Flatten batches to chunks 
+        # (Since we normalized batch to list of list, we just iterate)
+        
+        # NOTE: For RAG, we might want smaller chunks than batch size (4000). 
+        # But for now, let's index the 4000-char chunks as they are semantic enough.
+        
+        raw_chunks = [b[0] for b in batches if len(b) > 0 and isinstance(b[0], str)]
+        deck_id = state.get("deck_id", "default")
+        
+        # We assume source is unknown or passed in metadata? 
+        # For now simple index
+        rag_engine.index_content(raw_chunks, deck_id=deck_id, source_file="user_upload")
+        
+    return {"batches": batches}
 
 def generate_batch_node(state: BatchInput):
     """
@@ -122,7 +141,7 @@ def generate_batch_node(state: BatchInput):
         if is_image:
             # Construct ONE Multimodal Message for the whole batch
             content_parts = [
-                {"type": "text", "text": "Analyze these document slides/pages. Create 15-20 high-quality flashcards covering EVERY key concept shown across these pages. Be comprehensive. Return valid JSON only."}
+                {"type": "text", "text": "Analyze these document slides/pages. Create 15-20 high-quality flashcards. Group them by TOPIC (e.g. 'Intro', 'Mechanism', 'Summary'). ALSO generate a Mermaid.js flowchart (graph TD) summarizing the visual flow. FINALLY, provide a detailed textual summary/transcription for RAG. Return valid JSON with 'cards' (each having q, a, topic), 'flowchart', and 'transcription'."}
             ]
             for img in batch:
                 content_parts.append({
@@ -136,37 +155,59 @@ def generate_batch_node(state: BatchInput):
         else:
             # Text Batch (usually 1 large chunk)
             text_blob = "\n\n".join(batch)
+            # Updated Prompt for Flowchart
             prompt = ChatPromptTemplate.from_messages([
-                ("system", "You are an expert tutor. Create 15-20 high-quality flashcards covering all topics in the text. Return JSON with 'q' and 'a' keys."),
-                ("user", "{text}")
-            ])
+                 ("system", "You are an expert tutor. Create 15-20 high-quality flashcards covering all topics. "
+                            "Group them by generic TOPICS. "
+                            "ALSO, identify the core process or hierarchy in the text and generate a Mermaid.js flowchart (graph TD) representing it. "
+                            "Return JSON with keys: 'cards' (list of {{q, a, topic}}) and 'flowchart' (string, optional)."),
+                 ("user", "{text}")
+             ])
             chain = prompt | llm | parser
             # We bypass chain invoke to handle manual parsing if needed, but chain is cleaner for text
             res = chain.invoke({"text": text_blob})
             # chain returns parsed dict usually
-            if isinstance(res, dict) and "cards" in res:
-                return {"partial_cards": res['cards']}
+            if isinstance(res, dict):
+                return {
+                    "partial_cards": res.get('cards', []), 
+                    "flowcharts": [res.get('flowchart')] if res.get('flowchart') else [],
+                    "transcriptions": [res.get('transcription')] if res.get('transcription') else []
+                }
             elif isinstance(res, list):
-                 return {"partial_cards": res}
-            return {"partial_cards": []} # Fallback
+                 return {"partial_cards": res, "flowcharts": [], "transcriptions": []}
+            return {"partial_cards": [], "flowcharts": [], "transcriptions": []} # Fallback
 
         if is_image:
              # Manual Parse for Vision
-             parsed = parser.parse(res.content)
-             if isinstance(parsed, dict) and "cards" in parsed:
-                 generated = parsed['cards']
+             try:
+                parsed = parser.parse(res.content)
+             except:
+                # Fallback if raw text
+                parsed = {} 
+
+             if isinstance(parsed, dict):
+                 generated = parsed.get('cards', [])
+                 flowchart = parsed.get('flowchart')
+                 transcription = parsed.get('transcription', "")
              elif isinstance(parsed, list):
                  generated = parsed
-                 
+                 flowchart = None
+                 transcription = ""
+         
+        # Add flowchart to output if present
+        return {
+            "partial_cards": generated, 
+            "flowcharts": [flowchart] if flowchart else [],
+            "transcriptions": [transcription] if transcription else []
+        }
+
     except Exception as e:
-        print(f"Worker Error: {e}")
-        
-    return {"partial_cards": generated}
+        print(f"Error in generate_batch_node: {e}")
+        return {"partial_cards": [], "flowcharts": [], "transcriptions": []}
 
 def refine_deck(state: DeckState):
     print("--- NODE: REFINER (REDUCER) ---")
     raw_cards = state['partial_cards']
-    print(f"Debugging: Aggregated {len(raw_cards)} cards.")
     
     unique_map = {}
     for c in raw_cards:
@@ -180,7 +221,16 @@ def refine_deck(state: DeckState):
             unique_map[q.strip()] = {"q": q, "a": a}
             
     final = list(unique_map.values())
-    return {"final_cards": final}
+    
+    # Aggregate Flowcharts (Simple concatenation for now or pick longest)
+    # We just pass them through to final state or filter empty
+    flowcharts = state.get('flowcharts', [])
+    valid_charts = [f for f in flowcharts if f and isinstance(f, str) and "graph" in f]
+    
+    # Dedup flowcharts?
+    valid_charts = list(set(valid_charts))
+    
+    return {"final_cards": final, "flowcharts": valid_charts}
 
 # --- EDGE LOGIC ---
 

@@ -1,34 +1,46 @@
-# 🎨 FlashDeck AI - Frontend Layer
+# FlashDeck AI Frontend ⚡
 
-A premium, "Notion-like" interface built for focus and usability.
+A modern, immersive web application for studying and visualizing your notes.
 
-## 🌟 Design Philosophy
--   **Dark Mode First**: Optimized for late-night study sessions. `#191919` background with subtle borders.
--   **Glassmorphism**: Translucent navbars and cards using `backdrop-blur`.
--   **Minimalism**: Whitespace-heavy with Inter/Sans typography.
+## 🌟 New in v3.1
 
-## 📦 Tech Stack
--   **Vite**: Fast build tool.
--   **React**: Component-based UI.
--   **Tailwind CSS**: Utility-first styling.
--   **Lucide React**: Beautiful pixel-perfect icons.
--   **html2canvas & jspdf**: Client-side export generation.
+*   **Zero-Distraction Dashboard**: Clean upload interface with vibrant animations.
+*   **Topic-Based Decks**: Flashcards are intelligently grouped by topic (e.g., "Introduction", "Advanced Concepts").
+*   **Knowledge Base**: A professional 3-pane interface for deep diving:
+    *   **Source View**: See your uploaded files.
+    *   **Visual Canvas**: Zoomable Mermaid.js interactive flowcharts.
+    *   **AI Assistant**: Chat with your documents in real-time.
+*   **Export**: Download specific topic decks as high-quality PDFs.
 
-## 🧩 Key Components
+## 🛠️ Stack
 
-### `StickyTabs`
-A custom navigation component that sticks to the top of the viewport. It organizes the workflow into:
-1.  **Upload**: File dropzone / Text input.
-2.  **Review**: Grid view of generated cards.
-3.  **Export**: Download options.
+*   **Framework**: React (Vite)
+*   **Styling**: Tailwind CSS + Shadcn UI (Radix Primitives)
+*   **Icons**: Lucide React
+*   **Visuals**: Mermaid.js (Diagrams), Framer Motion (Animations)
+*   **Export**: html2canvas, jsPDF
 
-### `Flashcard Grid`
--   **Hover Effect**: Cards glow on hover.
--   **Focus Modal**: Clicking a card expands it to a full-screen focused view.
--   **Answer Reveal**: Answers are always visible (per user preference upgrade), but cleaner "Flashcard Mode" is available in exports.
+## 🏃‍♂️ Setup & Run
 
-## 🚀 Exporting
-The frontend handles exports client-side where possible:
--   **PDF**: Renders the grid to a canvas, then scales it (Scale 4.0) for high-DPI PDF output.
--   **PNG**: Captures the DOM element directly.
--   **Anki**: Triggers a backend endpoint to receive a generated `.apkg` file.
+1.  **Install Dependencies**:
+    ```bash
+    npm install
+    ```
+
+2.  **Start Dev Server**:
+    ```bash
+    npm run dev
+    ```
+    *   Access at: `http://localhost:5173`
+
+3.  **Build for Production**:
+    ```bash
+    npm run build
+    ```
+
+## 📂 Key Components
+
+*   `pages/Dashboard.jsx`: Main entry, upload handling, and navigation hub.
+*   `pages/MyDecks.jsx`: Topic grid and flashcard review interface with export.
+*   `pages/KnowledgeBase.jsx`: integrated 3-pane study environment.
+*   `components/FlowchartView.jsx`: Renders Mermaid.js diagrams.
