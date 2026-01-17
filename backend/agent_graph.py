@@ -18,11 +18,7 @@ env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 load_dotenv(env_path)
 
 # Import RAG Engine
-try:
-    import rag_engine
-except ImportError:
-    # Handle case where dependencies aren't ready yet or path issue
-    rag_engine = None
+import rag_engine
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 if not OPENROUTER_API_KEY:
@@ -230,6 +226,25 @@ def refine_deck(state: DeckState):
     # Dedup flowcharts?
     valid_charts = list(set(valid_charts))
     
+    # --- RAG INDEXING ---
+    # We do this here to ensure we only index after successful generation
+    if rag_engine:
+        transcriptions = state.get('transcriptions', [])
+        deck_id = state.get('deck_id')
+        
+        content_to_index = []
+        if transcriptions and any(transcriptions):
+             # Vision Mode: Index the LLM-generated transcriptions
+             content_to_index = transcriptions
+        else:
+             # Text Mode: Index the original text
+             original = state.get('original_text')
+             if isinstance(original, str):
+                 content_to_index = [original] # Let PDR split it
+        
+        if content_to_index:
+            rag_engine.index_content(content_to_index, deck_id, "Uploaded Document")
+
     return {"final_cards": final, "flowcharts": valid_charts}
 
 # --- EDGE LOGIC ---

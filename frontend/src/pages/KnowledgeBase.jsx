@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, FileText, Share2, ZoomIn, ZoomOut, MessageSquare, Send, Bot, User as UserIcon, Home } from 'lucide-react'
-import FlowchartView from '../components/FlowchartView'
+import MermaidEditor from '../components/MermaidEditor'
 
 // We'll rebuild a dedicated Chat pane here for better integration than the Sidebar component
 function ChatPane({ deckId }) {
@@ -79,6 +79,16 @@ function ChatPane({ deckId }) {
 
 export default function KnowledgeBase({ files, flowcharts, deckId }) {
     const [scale, setScale] = useState(1)
+    const [displayedFlowchart, setDisplayedFlowchart] = useState(null)
+
+    // Sync props to local state when deck changes
+    useState(() => {
+        if (flowcharts && flowcharts.length > 0) {
+            setDisplayedFlowchart(flowcharts[0])
+        } else {
+            setDisplayedFlowchart(null)
+        }
+    }, [flowcharts])
 
     return (
         <div className="h-screen bg-[#191919] text-gray-200 font-sans flex flex-col overflow-hidden">
@@ -134,9 +144,16 @@ export default function KnowledgeBase({ files, flowcharts, deckId }) {
 
                     <div className="flex-1 overflow-auto flex items-center justify-center p-10 cursor-move">
                         <div style={{ transform: `scale(${scale})`, transition: 'transform 0.2s' }} className="origin-center">
-                            {flowcharts && flowcharts.length > 0 ? (
-                                <div className="bg-[#191919] p-8 border border-white/5 rounded-xl shadow-2xl min-w-[600px] min-h-[400px] flex items-center justify-center">
-                                    <FlowchartView chartCode={flowcharts[0]} />
+                            {displayedFlowchart ? (
+                                <div className="h-full w-full">
+                                    <MermaidEditor
+                                        code={displayedFlowchart}
+                                        readOnly={false}
+                                        onSave={(newCode) => {
+                                            console.log("Saving Flowchart Update:", newCode)
+                                            setDisplayedFlowchart(newCode)
+                                        }}
+                                    />
                                 </div>
                             ) : (
                                 <div className="text-gray-600 flex flex-col items-center">

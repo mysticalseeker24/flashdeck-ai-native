@@ -1,15 +1,29 @@
 import os
 import shutil
+import pickle
 from typing import List, Optional
+from uuid import uuid4
+
+# LangChain Imports
 from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
 from langchain_core.documents import Document
+from langchain_classic.retrievers import ParentDocumentRetriever
+# from langchain.retrievers import ParentDocumentRetriever # Fallback failed
+from langchain_classic.storage import LocalFileStore
+# from langchain.storage import LocalFileStore
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+# from langchain_community.storage import LocalFileStore # Explicit import if needed
 
 # --- CONFIG ---
-# Store ChromaDB in the parent folder or inside backend? Inside backend is fine.
-CHROMA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chroma_db")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CHROMA_DIR = os.path.join(BASE_DIR, "chroma_db")
+DOC_STORE_DIR = os.path.join(BASE_DIR, "doc_store") # For Parent Docs
 
-# Load Env if not loaded (safe check)
+# Ensure directories exist
+os.makedirs(DOC_STORE_DIR, exist_ok=True)
+
+# Load Env
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -18,8 +32,7 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 def get_embeddings():
     """
     Returns the embedding function. 
-    Using OpenRouter compatible endpoint or defaulting to a lightweight local one if needed.
-    We'll try OpenRouter's text-embedding-3-small alias.
+    Using OpenRouter compatible endpoint (text-embedding-3-small).
     """
     return OpenAIEmbeddings(
         model="text-embedding-3-small",
@@ -30,51 +43,115 @@ def get_embeddings():
 
 def get_vectorstore():
     """
-    Returns the persistent Chroma VectorStore.
+    Returns the persistent Chroma VectorStore (Child Docs).
     """
     return Chroma(
-        collection_name="flashdeck_knowledge",
+        collection_name="flashdeck_knowledge_child", # New collection for v4 logic
         embedding_function=get_embeddings(),
         persist_directory=CHROMA_DIR
     )
 
+def get_docstore():
+    """
+    Returns the LocalFileStore for Parent Docs (blob storage), wrapped to handle Documents.
+    """
+    fs = LocalFileStore(DOC_STORE_DIR)
+    # We need to serialize Documents to bytes for LocalFileStore
+    # We can use a simple pickle-based store
+    from langchain_classic.storage import EncoderBackedStore
+    import pickle
+
+    def _pickle_encoder(obj):
+        return pickle.dumps(obj)
+
+    def _pickle_decoder(data):
+        return pickle.loads(data)
+
+    return EncoderBackedStore(
+        store=fs,
+        key_encoder=lambda x: x,
+        value_serializer=_pickle_encoder,
+        value_deserializer=_pickle_decoder,
+    )
+
+def get_retriever():
+    """
+    Constructs the ParentDocumentRetriever.
+    """
+    vectorstore = get_vectorstore()
+    store = get_docstore()
+    
+    # 1. Child Splitter: Small chunks for vector search
+    child_splitter = RecursiveCharacterTextSplitter(chunk_size=400, chunk_overlap=50)
+    
+    # 2. Parent Splitter: Large chunks (or None to use full docs) for LLM context
+    # If the input docs are already "Pages", we might not need to split parents further.
+    # But let's set a safe large limit (e.g. 2000 chars) in case we get raw text.
+    parent_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
+
+    retriever = ParentDocumentRetriever(
+        vectorstore=vectorstore,
+        docstore=store,
+        child_splitter=child_splitter,
+        parent_splitter=parent_splitter,
+    )
+    return retriever
+
 def index_content(text_chunks: List[str], deck_id: str, source_file: str):
     """
-    Indexes a list of text chunks associated with a specific deck/session.
+    Indexes content using the Advanced RAG (Parent-Child) strategy.
+    
+    Args:
+        text_chunks: List of strings. In v3/v4 logic, these are usually full Pages (transcribed or extracted).
     """
     if not text_chunks:
         return
         
-    print(f"--- RAG: Indexing {len(text_chunks)} chunks for Deck {deck_id} ---")
+    print(f"--- RAG (Advanced): Indexing {len(text_chunks)} Parent Chunks for Deck {deck_id} ---")
     
-    vs = get_vectorstore()
-    
+    # Convert strings to Documents
     documents = []
     for i, chunk in enumerate(text_chunks):
-        docs = Document(
+        doc = Document(
             page_content=chunk,
             metadata={
                 "deck_id": deck_id, 
                 "source": source_file,
-                "chunk_index": i
+                "page_number": i + 1
             }
         )
-        documents.append(docs)
-        
-    # Batch add
-    vs.add_documents(documents)
+        documents.append(doc)
+    
+    # Use the Retriever to add docs. 
+    # It will automatically:
+    # 1. Split these 'parents' into 'children'
+    # 2. Embed children -> Chroma
+    # 3. Store parents -> LocalFileStore
+    retriever = get_retriever()
+    retriever.add_documents(documents)
+    
     print("--- RAG: Indexing Complete ---")
 
 def query_vector_db(query: str, deck_id: Optional[str] = None, k: int = 4):
     """
-    Queries the knowledge base.
+    Queries the knowledge base using the Parent Document Retriever.
     """
-    vs = get_vectorstore()
+    retriever = get_retriever()
     
-    # Filter by deck_id if provided
-    filter_criteria = {"deck_id": deck_id} if deck_id else None
+    # Note: ParentDocumentRetriever search_kwargs are for the underlying vectorstore search
+    # We want to filter by deck_id.
+    if deck_id:
+        retriever.search_kwargs = {
+            "filter": {"deck_id": deck_id},
+            "k": k
+        }
+    else:
+        retriever.search_kwargs = {"k": k}
+
+    print(f"🔍 RAG Query: '{query}' (Deck: {deck_id})")
+    results = retriever.invoke(query)
     
-    results = vs.similarity_search(query, k=k, filter=filter_criteria)
+    # Results are the PARENT documents (large context).
     return results
 
 def check_health():
@@ -83,9 +160,6 @@ def check_health():
     """
     try:
         vs = get_vectorstore()
-        # Perform a dummy heartbeat
-        # vs.as_retriever().invoke("ping") # Retriver invoke might be expensive or syntax specific
-        # Just getting collection count is enough
         count = vs._collection.count()
         return True
     except Exception as e:
@@ -94,14 +168,15 @@ def check_health():
 
 def clear_deck_data(deck_id: str):
     """
-    Removes data for a specific deck (Cleanup).
+    Removes data for a specific deck.
+    TODO: This is harder with ParentDocumentRetriever as it manages keys. 
+    For now, we might skip deletion or implement a scan-and-delete if critical.
     """
-    # Chroma Basic Delete is tricky by metadata, but we can try.
     pass
 
 # --- STARTUP MESSAGE ---
 print("---------------------------------------------------------------")
-print(f"✅ ChromaDB RAG Engine Configured")
-print(f"📂 Storage Path: {CHROMA_DIR}")
-print(f"🔗 Embeddings: OpenAI (text-embedding-3-small via OpenRouter)")
+print(f"✅ Advanced RAG Engine (Parent Doc Retriever) Configured")
+print(f"📂 Vector Store: {CHROMA_DIR}")
+print(f"📂 Parent Store: {DOC_STORE_DIR}")
 print("---------------------------------------------------------------")
