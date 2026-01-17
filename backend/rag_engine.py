@@ -53,26 +53,9 @@ def get_vectorstore():
 
 def get_docstore():
     """
-    Returns the LocalFileStore for Parent Docs (blob storage), wrapped to handle Documents.
+    Returns the LocalFileStore for Parent Docs (blob storage).
     """
-    fs = LocalFileStore(DOC_STORE_DIR)
-    # We need to serialize Documents to bytes for LocalFileStore
-    # We can use a simple pickle-based store
-    from langchain_classic.storage import EncoderBackedStore
-    import pickle
-
-    def _pickle_encoder(obj):
-        return pickle.dumps(obj)
-
-    def _pickle_decoder(data):
-        return pickle.loads(data)
-
-    return EncoderBackedStore(
-        store=fs,
-        key_encoder=lambda x: x,
-        value_serializer=_pickle_encoder,
-        value_deserializer=_pickle_decoder,
-    )
+    return LocalFileStore(DOC_STORE_DIR)
 
 def get_retriever():
     """
