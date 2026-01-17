@@ -1,53 +1,136 @@
-# Version History
+# 📜 FlashDeck AI: Version History & Technical Changelog
 
-## v3.1 - The "Polish" Update (Current)
-*Released: 2026-01-17*
+> **A detailed chronicle of the evolution from a prototypal script to a scalable Agentic AI Platform.**
 
-**UX & Usability:**
-*   **Export Functionality**: Added "Export to PDF" button in the Top Deck view, allowing users to save specific topic decks.
-*   **Navigation**: Added "Home" icon buttons to `Dashboard`, `MyDecks`, and `KnowledgeBase` headers for easier navigation.
-*   **Cleanup**: Removed unused legacy components (`ChatSidebar`, `StickyTabs`) to reduce bundle size and maintenance overhead.
-
-**Bug Fixes:**
-*   Fixed a critical crash in generation where `{}` brackets in the prompt were misinterpreted by LangChain as missing variables.
-*   Fixed "ChatSidebar module not found" build error.
-
----
-
-## v3.0 - The "RAG & Vision" Overhaul
-*Released: 2026-01-16*
-
-**Core AI Improvements:**
-*   **Vision RAG**: Implemented a "Transcription" step for image-based PDFs (scanned docs). The LLM now generates a text summary of every page, which is indexed into ChromaDB.
-*   **Topic Aware**: Flashcards are now generated with a `topic` field, allowing for better organization.
-*   **Thinking Logs**: The backend now logs "Thinking..." steps to the console during chat, improving transparency.
-
-**UI Redesign:**
-*   **Dashboard**: Completely removed the sidebar/tabbe interface in favor of a clean "Upload -> Action" flow.
-*   **My Decks**: Introduced a Topic Grid view.
-*   **Knowledge Base**: Introduced a professional 3-pane layout (Source List | Flowchart | Char).
-*   **Flowcharts**: Moved flowcharts exclusively to the Knowledge Base for better visibility.
+## 🛠️ Current Tech Stack (v3.1)
+| Component | Technology | Role |
+| :--- | :--- | :--- |
+| **Frontend** | React + Vite + Tailwind | Responsive UI & State Management |
+| **Backend** | FastAPI + Uvicorn | High-performance Async API |
+| **Orchestration** | **LangGraph** | Cyclic State Machine for Agent workflows |
+| **AI Model** | **Google Gemini 3 Flash** | Low-latency Vision & Text Inference (via OpenRouter) |
+| **Vector DB** | ChromaDB | Local embedding storage for RAG |
+| **Observation** | LangSmith (Optional) | Tracing & Debugging |
 
 ---
 
-## v2.0 - The "Agentic" Shift
-*   Migrated from simple chains to **LangGraph**.
-*   Introduced `DeckState` for managing generation flow.
-*   Added `refine_deck` node for deduplication.
+## 🟢 v3.1: "The Polish" Update (Current)
+**Release Date**: Jan 17, 2026
+**Branch**: `main`, `version-3`
+**Status**: Production Ready
 
-### Prerequisites
-*   Node.js (v18+)
-*   Python (v3.9+)
-*   OpenRouter API Key
+Building on the v3.0 overhaul, this update focused on **User Experience (UX)** and **System Hygiene**. We restored critical features lost during the rewrite and cleaned up technical debt.
 
-### 1. Launch Backend
-```bash
-cd backend
-# Setup env
-echo "OPENROUTER_API_KEY=your_key_here" > .env
+### ✨ Key Features
+*   **Export Functionality**: Restored ability to download flashcards as PDFs.
+    *   *Implementation*: Uses `html2canvas` to capture the DOM element of the card grid and `jspdf` to generate a paginated PDF document.
+*   **Navigation & Routing**:
+    *   Added explicit `Home` (🏠) buttons to `Dashboard`, `MyDecks`, and `KnowledgeBase`.
+    *   Refactored `App.jsx` to maintain state (deck data) across route transitions.
+
+### 🧹 Codebase & Tech
+*   **Cleanup**: Deleted legacy components (`ChatSidebar.jsx`, `StickyTabs.jsx`) to reduce bundle size.
+*   **Prompt Engineering**: Fixed a critical LangChain bug where JSON schema descriptions containing `{}` were being parsed as missing F-String variables.
+
+---
+
+## 🟡 v3.0: "Vision RAG" Overhaul
+**Release Date**: Jan 16, 2026
+**Focus**: Scanned Docs & Advanced UI
+**Model Change**: Switched from **Gemini 3 Pro** -> **Gemini 3 Flash** (Speed & Vision focus).
+
+This version solved the "Scanned PDF" problem. Previous versions failed to read text from images. v3.0 introduced a vision-based transcription step and a completely new UI.
+
+### 🧠 AI Architecture (Vision Pipeline)
+We moved to a "Transcribe-First" RAG approach for image-heavy documents.
+
+```mermaid
+graph LR
+    PDF[Input PDF] -->|PyMuPDF| Images[Page Images]
+    Images -->|Vision LLM| Transcriber[Gemini 3 Flash]
+    Transcriber -->|Extract| Text[Page Summary/Text]
+    Text -->|Index| VectorDB[(ChromaDB)]
+    Text -->|Generate| Cards[Flashcards with Topic]
 ```
 
-## v1.0 - MVP
-*   Basic PDF text extraction.
-*   Simple Q&A generation.
-*   Basic Chat interface.
+### 🎨 UI Architecture (The 3-Pane Layout)
+We abandoned the "Sidebar" navigation for a "Workspace" model.
+
+| Feature | Description |
+| :--- | :--- |
+| **Knowledge Base** | A dedicated 3-pane IDE for study: **(1) Source Files**, **(2) Zoomable Flowchart**, **(3) AI Chat**. |
+| **Topic Grid** | Flashcards are now grouped by Semantic Topic (e.g., "Intro", "Deep Learning") rather than a flat list. |
+
+### 📂 File Structure (v3.0)
+```text
+flashdeck-ai/
+├── backend/
+│   ├── rag_engine.py     # <--- NEW: Dedicated RAG handling
+│   ├── agent_graph.py    # Updated with Transcription Node
+│   └── chroma_db/        # Local Vector Store
+└── frontend/
+    └── src/pages/
+        ├── MyDecks.jsx       # Topic Grid
+        └── KnowledgeBase.jsx # 3-Pane Studio
+```
+
+---
+
+## 🟠 v2.0: "Turbo" / "Agentic" Shift
+**Release Date**: Jan 16, 2026
+**Focus**: Latency, Scale, Parallelism
+**Model**: **Gemini 3 Pro Preview** (Chosen for reasoning depth)
+
+The "Turbo" update was a complete backend rewrite. It moved the system from a linear chain to a parallel **Map-Reduce** graph using LangGraph.
+
+### 🏗️ Technical Architecture (Map-Reduce)
+We transitioned to a **LangGraph** architecture that supports dynamic parallelization.
+
+```mermaid
+graph LR
+    Input[PDF] --> Batcher[Chunker: Batches of 5]
+    Batcher -->|Send| W1[Worker 1]
+    Batcher -->|Send| W2[Worker 2]
+    Batcher -->|Send| W3[Worker 3]
+    W1 -->|Yield| Reducer[Refiner Agent]
+    W2 -->|Yield| Reducer
+    W3 -->|Yield| Reducer
+    Reducer --> Output[Final Deck]
+```
+
+### 🧠 Agent Specifications
+
+| Component | Implementation Detail |
+| :--- | :--- |
+| **Mapper (Chunker)** | Groups content into clusters of 5 pages to maximize Token-to-Prompt ratio. |
+| **Worker (Generator)** | Uses `gemini-3-pro` to generate high-quality Q&A pairs from batches. |
+| **Reducer (Refiner)** | Aggregates partial results and deduplicates based on fuzzy matching of Questions. |
+
+### 🛠️ Configuration (v2.0)
+```ini
+# .env Configuration (v2)
+LANGSMITH_TRACING=true
+OPENROUTER_API_KEY=sk-or-v1... # Gemini 3 Pro
+```
+
+---
+
+## 🔴 v1.0: "Genesis" (Legacy)
+**Release Date**: Jan 15, 2026
+**Focus**: Proof of Concept / MVP
+**Model**: **Gemini 3 Pro Preview**
+
+The initial release established the feasibility of the "Text-to-Flashcard" pipeline. It was effective but slow for large documents as it processed chunks sequentially.
+
+### 🏗️ Technical Architecture (Linear)
+v1 used a synchronous, loop-based approach.
+
+1.  **Extract Text**: Used `pypdf` to scrape raw text.
+2.  **Chunk**: Split text into 4000-character blocks using `RecursiveCharacterTextSplitter`.
+3.  **Loop**: Iterate through chunks one by one -> Call LLM -> Wait -> Repeat.
+4.  **Refine**: Simple list concatenation.
+
+### ⚠️ Limitations (Why we upgraded)
+1.  **Latency**: Processing a 100-page PDF took **3+ Minutes**.
+2.  **No Vision**: Explicitly failed on scanned PDFs or handwriting.
+3.  **Cost**: Using `Gemini 3 Pro` for every single chunk sequentially was inefficient.
